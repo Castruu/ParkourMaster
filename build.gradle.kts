@@ -19,6 +19,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.5-R0.1-SNAPSHOT")
+    implementation("com.zaxxer:HikariCP:6.3.0")
 }
 
 java {
