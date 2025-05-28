@@ -1,0 +1,4 @@
+name: ParkourMaster
+version: '1.0-SNAPSHOT'
+main: com.vfcastro.dev.parkour.ParkourMaster
+api-version: '1.21'
