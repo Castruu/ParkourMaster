@@ -17,9 +17,9 @@ public class DatabaseManager {
 
     public HikariDataSource connect(DatabaseConfiguration configuration) {
         HikariConfig config = new HikariConfig();
-        config.setPassword(configuration.getPassword());
-        config.setJdbcUrl(configuration.getUrl());
-        config.setUsername(configuration.getUsername());
+        config.setPassword(configuration.password());
+        config.setJdbcUrl(configuration.url());
+        config.setUsername(configuration.username());
         config.setMaximumPoolSize(10);
 
         return new HikariDataSource(config);
