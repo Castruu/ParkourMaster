@@ -10,7 +10,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 
-import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -37,22 +36,38 @@ public class ParkourManager {
 
 
     private void loadParkourFromDatabase() {
-        List<Parkour> parkourList = parkourDatabaseManager.getAllParkour();
-        if (parkourList == null) {
-            plugin.getServer().sendRichMessage("<red>Problem while loading parkour.</red>");
-            return;
-        }
+        parkourDatabaseManager.getAllParkour(
+                (parkourList) -> {
+                    if (parkourList == null) {
+                        plugin.getServer().sendRichMessage("<red>Problem while loading parkour.</red>");
+                        return;
+                    }
 
-        for(Parkour parkour : parkourList) {
-            List<Checkpoint> checkpoints = parkourDatabaseManager.getCheckpointsFromParkour(parkour);
-            checkpoints.forEach(this::addPressurePlateToCheckpoint);
-            parkoursMap.put(parkour.name(), new ParkourData(parkour, checkpoints));
-        }
+                    for (Parkour parkour : parkourList) {
+                        parkourDatabaseManager.getCheckpointsFromParkour(parkour,
+                                (checkpoints) -> {
+                                    checkpoints.forEach(this::addPressurePlateToCheckpoint);
+                                    parkoursMap.put(parkour.name(), new ParkourData(parkour, checkpoints));
+                                },
+                                (e) -> {
+                                    throw new IllegalStateException("Unable to load checkpoints from database.");
+                                }
+                        );
+
+                    }
+                },
+                (e) -> {
+                    throw new IllegalStateException("Unable to load parkour from database.");
+                }
+        );
+
     }
 
     private void addPressurePlateToCheckpoint(Checkpoint checkpoint) {
         Location location = new Location(Bukkit.getWorlds().getFirst(), checkpoint.x(), checkpoint.y(), checkpoint.z());
-        location.getBlock().setType(Material.LIGHT_WEIGHTED_PRESSURE_PLATE);
+        plugin.getServer().getScheduler().runTask(
+                plugin, () -> location.getBlock().setType(Material.LIGHT_WEIGHTED_PRESSURE_PLATE)
+        );
     }
 
     public Optional<ParkourData> getParkourDataByParkourName(String parkourName) {
@@ -69,26 +84,43 @@ public class ParkourManager {
                 name,
                 false
         );
-        BigInteger parkourId = parkourDatabaseManager.createParkour(parkour);
-        Parkour persistedParkour = parkourDatabaseManager.getParkour(parkourId);
-        Checkpoint checkpoint = new Checkpoint(
-                persistedParkour,
-                null,
-                0,
-                location.getBlockX(),
-                location.getBlockY(),
-                location.getBlockZ()
-        );
-        parkourDatabaseManager.addParkourCheckpointToParkour(persistedParkour, checkpoint);
-        parkoursMap.put(name, new ParkourData(persistedParkour, List.of(checkpoint)));
-        addPressurePlateToCheckpoint(checkpoint);
+        parkourDatabaseManager.createParkour(parkour,
+                (parkourId) -> {
+                    parkourDatabaseManager.getParkour(parkourId,
+                            (persistedParkour) -> {
+                                Checkpoint checkpoint = new Checkpoint(
+                                        persistedParkour,
+                                        null,
+                                        0,
+                                        location.getBlockX(),
+                                        location.getBlockY(),
+                                        location.getBlockZ()
+                                );
+                                parkourDatabaseManager.addParkourCheckpointToParkour(persistedParkour, checkpoint,
+                                        (result) -> {
+                                            if (result) {
+                                                parkoursMap.put(name, new ParkourData(persistedParkour, List.of(checkpoint)));
+                                                addPressurePlateToCheckpoint(checkpoint);
+                                            } else throw new IllegalStateException("Error while creating checkpoint.");
+                                        }, (e) -> {
+                                            throw new IllegalStateException("Error while creating checkpoint.");
+                                        });
+                            }, (e) -> {
+                                throw new IllegalStateException("Error while fetching parkour.");
+                            });
+                    ;
+                }, (e) -> {
+                    throw new IllegalStateException("Error while creatin parkour.");
+                });
+
+
     }
 
     public void addCheckpointToParkour(String name, Location location) {
         ParkourData parkourData = getParkourDataByParkourName(name).orElseThrow(
                 () -> new IllegalArgumentException("Parkour not found with name: " + name)
         );
-        if(parkourData.parkour().finished()) {
+        if (parkourData.parkour().finished()) {
             throw new IllegalStateException("Parkour " + name + " is already finished.");
         }
         int nextStep = parkourData.checkpoints().stream()
@@ -103,14 +135,20 @@ public class ParkourManager {
                 location.getBlockY(),
                 location.getBlockZ()
         );
-        parkourDatabaseManager.addParkourCheckpointToParkour(parkourData.parkour(), checkpoint);
-        ParkourData pData = new ParkourData(parkourData.parkour(),
-                Stream.concat(
-                  parkourData.checkpoints().stream(),
-                  Stream.of(checkpoint)
-                ).collect(Collectors.toList()));
-        parkoursMap.put(name, pData);
-        addPressurePlateToCheckpoint(checkpoint);
+        parkourDatabaseManager.addParkourCheckpointToParkour(parkourData.parkour(), checkpoint,
+                (result) -> {
+                    if (result) {
+                        ParkourData pData = new ParkourData(parkourData.parkour(),
+                                Stream.concat(
+                                        parkourData.checkpoints().stream(),
+                                        Stream.of(checkpoint)
+                                ).collect(Collectors.toList()));
+                        parkoursMap.put(name, pData);
+                        addPressurePlateToCheckpoint(checkpoint);
+                    } else throw new IllegalStateException("Error while creating checkpoint.");
+                }, (e) -> {
+                    throw new IllegalStateException("Error while creating checkpoint.");
+                });
     }
 
     public boolean isParkourFinished(String name) {
@@ -124,18 +162,25 @@ public class ParkourManager {
                 () -> new IllegalArgumentException("Parkour not found with name: " + name)
         );
 
-        parkourDatabaseManager.finishParkour(parkourData.parkour());
+        parkourDatabaseManager.finishParkour(parkourData.parkour(),
+                (result) -> {
+                    if (result) {
+                        ParkourData updatedParkourData = new ParkourData(
+                                new Parkour(
+                                        parkourData.parkour().id(),
+                                        parkourData.parkour().name(),
+                                        true
+                                ),
+                                parkourData.checkpoints()
+                        );
 
-        ParkourData updatedParkourData = new ParkourData(
-                new Parkour(
-                        parkourData.parkour().id(),
-                        parkourData.parkour().name(),
-                        true
-                ),
-                parkourData.checkpoints()
-        );
+                        parkoursMap.put(name, updatedParkourData);
+                    } else throw new IllegalStateException("Error while finishing checkpoint.");
+                }, (e) -> {
+                    throw new IllegalStateException("Error while finishing checkpoint.");
+                });
 
-        parkoursMap.put(name, updatedParkourData);
+
     }
 
     public void startPlayerParkour(UUID playerUUID, String name) {

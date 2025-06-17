@@ -3,7 +3,6 @@ package com.vfcastro.dev.parkour;
 import com.vfcastro.dev.parkour.commands.ParkourCommand;
 import com.vfcastro.dev.parkour.config.Configuration;
 import com.vfcastro.dev.parkour.config.DatabaseConfiguration;
-import com.vfcastro.dev.parkour.data.ParkourData;
 import com.vfcastro.dev.parkour.database.DatabaseManager;
 import com.vfcastro.dev.parkour.database.ParkourDatabaseManager;
 import com.vfcastro.dev.parkour.events.TouchGoldenPlateEvent;
@@ -11,15 +10,11 @@ import com.vfcastro.dev.parkour.manager.ParkourManager;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Map;
 
 public class ParkourMaster extends JavaPlugin {
 
     private DatabaseManager databaseManager;
     private ParkourManager parkourManager;
-    private ParkourDatabaseManager parkourDatabaseManager;
     private Configuration configuration;
 
     @Override
@@ -27,7 +22,7 @@ public class ParkourMaster extends JavaPlugin {
         saveDefaultConfig();
         initializeConfiguration();
         initializeDatabase(configuration.databaseConfiguration());
-        parkourDatabaseManager = new ParkourDatabaseManager(databaseManager);
+        ParkourDatabaseManager parkourDatabaseManager = new ParkourDatabaseManager(this, databaseManager);
         parkourManager = new ParkourManager(this, parkourDatabaseManager);
 
         initializeCommands(parkourManager);
